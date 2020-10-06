@@ -1,0 +1,274 @@
+---
+- name: gather operating system variables
+  include_vars: "{{ item }}"
+  with_first_found:
+    - "{{ ansible_distribution | lower }}-{{ ansible_distribution_version | lower }}.yml"
+    - "{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version | lower }}.yml"
+    - "{{ ansible_distribution_file_variety | lower }}-{{ ansible_distribution_major_version | lower }}.yml"
+    - "{{ ansible_os_family | lower }}-{{ ansible_distribution_major_version | lower }}.yml"
+    - "{{ ansible_distribution | lower }}.yml"
+    - "{{ ansible_os_family | lower }}-{{ ansible_distribution_version.split('.')[0] }}.yml"
+    - "{{ ansible_os_family | lower }}.yml"
+  become: true
+  tags: alertmanager
+
+- name: assert usage of systemd as an init system
+  assert:
+    that: ansible_service_mgr == 'systemd'
+    msg: "This module only works with systemd"
+  become: true
+  tags: alertmanager
+
+- name: get systemd version
+  command: systemctl --version
+  changed_when: false
+  check_mode: false
+  register: __systemd_version
+  become: true
+  tags: alertmanager
+
+- name: set systemd version fact
+  set_fact:
+    alertmanager_systemd_version: "{{ __systemd_version.stdout_lines[0].split(' ')[-1] }}"
+  become: true
+  tags: alertmanager
+
+- name: create alertmanager system group
+  group:
+    name: "{{ alertmanager_system_group }}"
+    system: true
+    state: present
+  become: true
+  tags: alertmanager
+
+- name: create alertmanager system user
+  user:
+    name: "{{ alertmanager_system_user }}"
+    system: true
+    shell: "/usr/sbin/nologin"
+    group: "{{ alertmanager_system_group }}"
+    createhome: false
+  become: true
+  tags: alertmanager
+
+- name: create alertmanager directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ alertmanager_system_user }}"
+    group: "{{ alertmanager_system_group }}"
+    mode: 0755
+  with_items:
+    - "{{ alertmanager_config_dir }}"
+    - "{{ alertmanager_config_dir }}/templates"
+    - "{{ alertmanager_db_dir }}"
+  become: true
+  tags: alertmanager
+
+- name: check if alertmanager is installed
+  stat:
+    path: "{{ alertmanager_binary_install_dir }}/alertmanager"
+  register: __alertmanager_is_installed
+  become: true
+  tags: alertmanager
+
+- name: gather currently installed alertmanager version (if any)
+  command: "{{ alertmanager_binary_install_dir }}/alertmanager --version"
+  args:
+    warn: false
+  changed_when: false
+  register: __alertmanager_current_version_output
+  when: __alertmanager_is_installed.stat.exists
+  become: true
+  tags: alertmanager
+
+- block:
+  - name: get latest release
+    uri:
+      url: "https://api.github.com/repos/prometheus/alertmanager/releases/latest"
+      method: GET
+      return_content: true
+      status_code: 200
+      body_format: json
+      validate_certs: false
+      user: "{{ lookup('env', 'GH_USER') | default(omit) }}"
+      password: "{{ lookup('env', 'GH_TOKEN') | default(omit) }}"
+    environment: "{{proxy_env}}"
+    no_log: "{{ not lookup('env', 'MOLECULE_DEBUG') | bool }}"
+    register: _latest_release
+    until: _latest_release.status == 200
+    retries: 5
+    become: true
+    tags: alertmanager
+
+  - name: "set alertmanager version to {{ _latest_release.json.tag_name[1:] }}"
+    set_fact:
+      alertmanager_version: "{{ _latest_release.json.tag_name[1:] }}"
+    become: true
+    tags: alertmanager
+  when:
+    - alertmanager_version == "latest"
+
+- block:
+  - name: get checksum list from github
+    set_fact:
+      _checksums: "{{ lookup('url', 'https://github.com/prometheus/alertmanager/releases/download/v' + alertmanager_version + '/sha256sums.txt', wantlist=True) | list }}"
+    environment: "{{ proxy_env }}"
+    run_once: true
+    become: true
+    tags: alertmanager
+
+  - name: "get checksum for {{ go_arch }} architecture"
+    set_fact:
+      alertmanager_checksum: "{{ item.split(' ')[0] }}"
+    with_items:
+      - "{{ lookup('url', 'https://github.com/prometheus/alertmanager/releases/download/v' + alertmanager_version + '/sha256sums.txt', wantlist=True) | list }}"
+    when:
+      - "('linux-' + go_arch + '.tar.gz') in item"
+    become: true
+    tags: alertmanager
+
+  - name: download alertmanager binary to local folder
+    get_url:
+      url: "https://github.com/prometheus/alertmanager/releases/download/v{{ alertmanager_version }}/alertmanager-{{ alertmanager_version }}.linux-{{ go_arch }}.tar.gz"
+      dest: "/tmp/alertmanager-{{ alertmanager_version }}.linux-{{ go_arch }}.tar.gz"
+      checksum: "sha256:{{ alertmanager_checksum }}"
+    environment: "{{proxy_env}}"
+    register: _download_archive
+    until: _download_archive is succeeded
+    retries: 5
+    delay: 2
+    # run_once: true # <-- this can't be set due to multi-arch support
+    delegate_to: localhost
+    check_mode: false
+    become: true
+    tags: alertmanager
+
+  - name: unpack alertmanager binaries
+    unarchive:
+      src: "/tmp/alertmanager-{{ alertmanager_version }}.linux-{{ go_arch }}.tar.gz"
+      dest: "/tmp"
+      creates: "/tmp/alertmanager-{{ alertmanager_version }}.linux-{{ go_arch }}/alertmanager"
+    delegate_to: localhost
+    check_mode: false
+    become: true
+    tags: alertmanager
+
+  - name: propagate official alertmanager and amtool binaries
+    copy:
+      src: "/tmp/alertmanager-{{ alertmanager_version }}.linux-{{ go_arch }}/{{ item }}"
+      dest: "{{ alertmanager_binary_install_dir }}/{{ item }}"
+      mode: 0755
+      owner: root
+      group: root
+    with_items:
+      - alertmanager
+      - amtool
+    notify: restart alertmanager
+    become: true
+    tags: alertmanager
+  when: (not __alertmanager_is_installed.stat.exists) or (__alertmanager_current_version_output.stderr_lines[0].split(" ")[2] != alertmanager_version)
+
+- name: copy alertmanager config
+  template:
+    force: true
+    src: alertmanager.yml.j2
+    dest: "{{ alertmanager_config_dir }}/config.yml"
+    owner: "{{ alertmanager_system_user }}"
+    group: "{{ alertmanager_system_group }}"
+    mode: 0644
+    validate: "{{ alertmanager_binary_install_dir }}/amtool --alertmanager.url=  check-config %s"
+  notify: reload alertmanager
+  become: true
+  tags: alertmanager
+
+- name: copy alertmanager template files
+  copy:
+    src: "{{ item }}"
+    dest: "{{ alertmanager_config_dir }}/templates/"
+    force: true
+    owner: "{{ alertmanager_system_user }}"
+    group: "{{ alertmanager_system_group }}"
+    mode: 0644
+  with_fileglob: "{{ alertmanager_template_files }}"
+  notify: reload alertmanager
+  become: true
+  tags: alertmanager
+
+- name: create systemd service unit
+  template:
+    src: alertmanager.service.j2
+    dest: /etc/systemd/system/alertmanager.service
+    owner: root
+    group: root
+    mode: 0644
+  notify: restart alertmanager
+  become: true
+  tags: alertmanager
+
+- name: copy consul-agent service json
+  template:
+    src: consul_agent_service.json.j2
+    dest: /etc/consul.d/alertmanager.json
+    owner: consul
+    group: consul
+    mode: 0644
+  when: alertmanager_create_consul_agent_service
+  notify: reload consul
+  become: true
+  tags: alertmanager
+
+- name: install selinux dependencies
+  package:
+    name: "{{ item }}"
+    state: present
+  environment: "{{ proxy_env }}"
+  with_items: "{{ alertmanager_selinux_packages }}"
+  register: _install_packages
+  until: _install_packages is succeeded
+  retries: 5
+  delay: 2
+  when:
+    - ansible_version.full is version_compare('2.4', '>=')
+    - ansible_selinux.status == "enabled"
+  become: true
+  tags: alertmanager
+
+- name: allow binding to port in selinux
+  seport:
+    ports: "{{ alertmanager_web_listen_port }}"
+    proto: tcp
+    setype: http_port_t
+    state: present
+  when:
+    - ansible_version.full is version_compare('2.4', '>=')
+    - ansible_selinux.status == "enabled"
+  become: true
+  tags: alertmanager
+
+- name: allow access to port on firewalld
+  firewalld:
+    port: "{{ alertmanager_web_listen_port }}/tcp"
+    permanent: yes
+    state: true
+  when: alertmanager_firewalld_state == "enabled"
+  register: "_firewalld_alertmanager_state"
+  become: true
+  tags: alertmanager
+
+- name: reload firewalld service
+  service:
+    name: firewalld
+    state: reloaded
+  when: _firewalld_alertmanager_state['changed']
+  become: true
+  tags: alertmanager
+
+- name: start and enable alertmanager service
+  systemd:
+    daemon_reload: true
+    name: alertmanager
+    state: started
+    enabled: true
+  become: true
+  tags: alertmanager
