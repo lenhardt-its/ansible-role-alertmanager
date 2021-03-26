@@ -71,7 +71,7 @@ All variables which can be overridden are stored in [defaults/main.yml](defaults
 ```yaml
 - hosts: all
   roles:
-    - ansible-role-alertmanager
+    - onkeldom.alertmanager
 ```
 
 ## Contributing
