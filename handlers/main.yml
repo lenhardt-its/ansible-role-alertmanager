@@ -13,10 +13,3 @@
     state: reloaded
   become: true
   tags: alertmanager
-
-- name: reload consul
-  systemd:
-    name: consul
-    state: reloaded
-  become: true
-  tags: alertmanager

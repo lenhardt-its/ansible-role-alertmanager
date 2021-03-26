@@ -1,18 +1,17 @@
 ---
 proxy_env: {}
 alertmanager_version: 0.21.0
-alertmanager_binary_install_dir: '/usr/local/bin'
-alertmanager_firewalld_state: "disabled"
+alertmanager_binary_install_dir: /usr/local/bin
+alertmanager_allow_firewall: false
 alertmanager_config_dir: /etc/alertmanager
 alertmanager_db_dir: /var/lib/alertmanager
 alertmanager_system_user: "{{ prometheus_user | default('prometheus') }}"
 alertmanager_system_group: "{{ prometheus_group | default('prometheus') }}"
 alertmanager_log_level: warn
 alertmanager_log_format: json
-alertmanager_web_listen_port: '9093'
-alertmanager_web_listen_address: "0.0.0.0"
-alertmanager_create_consul_agent_service: true
-alertmanager_web_external_url: 'http://localhost:9093/'
+alertmanager_web_listen_port: 9093
+alertmanager_web_listen_address: 0.0.0.0
+alertmanager_web_external_url: 'http://{{ ansible_domain }}.{{ ansible_hostname }}:{{ alertmanager_web_listen_port }}/'
 
 alertmanager_template_files:
   - alertmanager/templates/*.tmpl

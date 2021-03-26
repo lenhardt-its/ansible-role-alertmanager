@@ -1,12 +1,23 @@
 # Ansible Role: alertmanager
 
+[![ubuntu-18](https://img.shields.io/badge/ubuntu-18.x-orange?style=flat&logo=ubuntu)](https://ubuntu.com/)
+[![ubuntu-20](https://img.shields.io/badge/ubuntu-20.x-orange?style=flat&logo=ubuntu)](https://ubuntu.com/)
+[![debian-9](https://img.shields.io/badge/debian-9.x-orange?style=flat&logo=debian)](https://www.debian.org/)
+[![debian-10](https://img.shields.io/badge/debian-10.x-orange?style=flat&logo=debian)](https://www.debian.org/)
+[![centos-7](https://img.shields.io/badge/centos-7.x-orange?style=flat&logo=centos)](https://www.centos.org/)
+[![centos-8](https://img.shields.io/badge/centos-8.x-orange?style=flat&logo=centos)](https://www.centos.org/)
+[![License](https://img.shields.io/badge/license-MIT%20License-brightgreen.svg?style=flat)](https://opensource.org/licenses/MIT)
+[![GitHub issues](https://img.shields.io/github/issues/OnkelDom/ansible-role-monitoring?style=flat)](https://github.com/OnkelDom/ansible-role-monitoring/issues)
+[![GitHub tag](https://img.shields.io/github/tag/OnkelDom/ansible-role-monitoring.svg?style=flat)](https://github.com/OnkelDom/ansible-role-monitoring/tags)
+
 ## Description
 
 Deploy and manage Prometheus [alertmanager](https://github.com/prometheus/alertmanager) service using ansible.
 
 ## Requirements
 
-- Ansible >= 2.6 (It might work on previous versions, but we cannot guarantee it)
+- Ansible >= 2.9 (It might work on previous versions, but we cannot guarantee it)
+- Community Packages: `ansible-galaxy collection install community.general`
 
 ## Role Variables
 
@@ -15,7 +26,6 @@ All variables which can be overridden are stored in [defaults/main.yml](defaults
 | Name           | Default Value | Description                        |
 | -------------- | ------------- | -----------------------------------|
 | `proxy_env` | {} | Proxy environment variables |
-| `alertmanager_create_consul_agent_service` | "true" | Add consul agent config snipped |
 | `alertmanager_version` | 0.21.0 | Alertmanager package version. Also accepts `latest` as parameter. |
 | `alertmanager_web_listen_address` | 0.0.0.0:9093 | Address on which alertmanager will be listening |
 | `alertmanager_web_external_url` | http://localhost:9093/ | External address on which alertmanager is available. Useful when behind reverse proxy. Ex. example.org/alertmanager |
@@ -42,17 +52,17 @@ All variables which can be overridden are stored in [defaults/main.yml](defaults
 | `alertmanager_child_routes` | [] | List of child routes. |
 | -------------- | ------------- | -----------------------------------|
 | `alertmanager_binary_local_dir` | /usr/local/bin | |
-| `alertmanager_firewalld_state` | "disabled" | |
+| `alertmanager_allow_firewall` | false | |
 | `alertmanager_config_dir` | /etc/alertmanager | |
 | `alertmanager_db_dir` | /var/lib/alertmanager | |
 | `alertmanager_system_user` | "{{ prometheus_user | default('prometheus') }}" | |
 | `alertmanager_system_group` | "{{ prometheus_group | default('prometheus') }}" | |
 | `alertmanager_log_level ` | warn | |
 | `alertmanager_log_format` | json | |
-| `alertmanager_web_listen_port:` | 909 | |
+| `alertmanager_web_listen_port:` | 9093 | |
 | `alertmanager_web_listen_address` | "0.0.0.0" | |
 | `alertmanager_create_consul_agent_service` | true | |
-| `alertmanager_web_external_url` | "http://localhost:9093/" | |
+| `alertmanager_web_external_url` | "http://{{ ansible_domain }}.{{ ansible_hostname }}:{{ alertmanager_web_listen_port }}/" | |
 
 ## Example
 

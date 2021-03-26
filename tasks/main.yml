@@ -180,7 +180,9 @@
     validate: "{{ alertmanager_binary_install_dir }}/amtool --alertmanager.url=  check-config %s"
   notify: reload alertmanager
   become: true
-  tags: alertmanager
+  tags:
+    - alertmanager
+    - alertmanager_config
 
 - name: copy alertmanager template files
   copy:
@@ -193,7 +195,9 @@
   with_fileglob: "{{ alertmanager_template_files }}"
   notify: reload alertmanager
   become: true
-  tags: alertmanager
+  tags:
+    - alertmanager
+    - alertmanager_config
 
 - name: create systemd service unit
   template:
@@ -206,17 +210,12 @@
   become: true
   tags: alertmanager
 
-- name: copy consul-agent service json
-  template:
-    src: consul_agent_service.json.j2
-    dest: /etc/consul.d/alertmanager.json
-    owner: consul
-    group: consul
-    mode: 0644
-  when: alertmanager_create_consul_agent_service
-  notify: reload consul
-  become: true
-  tags: alertmanager
+- name: enable capabilities to ports lower than port 1024
+  capabilities:
+    path: "{{ alertmanager_binary_install_dir }}/alertmanager"
+    capability: CAP_NET_BIND_SERVICE+ep
+    state: present
+  when: alertmanager_web_listen_port <= 1024
 
 - name: install selinux dependencies
   package:
@@ -246,21 +245,64 @@
   become: true
   tags: alertmanager
 
-- name: allow access to port on firewalld
+- name: check whether ufw status is active
+  command: "ufw status"
+  changed_when: False
+  ignore_errors: True
+  register: _ufw_status
+  become: true
+  when:
+    - alertmanager_allow_firewall
+    - ansible_os_family == 'Debian'
+  tags: alertmanager
+
+- name: configure ufw
+  community.general.ufw:
+    rule: allow
+    port: "{{ alertmanager_web_listen_port }}"
+    proto: tcp
+    state: enabled
+    comment: "Alertmanager"
+  notify: reload ufw
+  become: true
+  tags: alertmanager
+  register: "_firewalld_alertmanager_state"
+  when:
+    - "'active' in _ufw_status.stdout"
+    - ansible_os_family == 'Debian'
+    - alertmanager_allow_firewall
+
+- name: reload ufw
+  systemd:
+    name: ufw
+    state: reloaded
+  when:
+    - _firewalld_alertmanager_state['changed']
+    - ansible_os_family == 'Debian'
+    - alertmanager_allow_firewall
+  become: true
+  tags: alertmanager
+
+- name: configure firewalld
   firewalld:
     port: "{{ alertmanager_web_listen_port }}/tcp"
     permanent: yes
     state: true
-  when: alertmanager_firewalld_state == "enabled"
-  register: "_firewalld_alertmanager_state"
+  when:
+    - alertmanager_allow_firewall
+    - ansible_os_family == RedHat
+  register: "_firewalld_vmware_exporter_state"
   become: true
   tags: alertmanager
 
-- name: reload firewalld service
-  service:
+- name: reload firewalld
+  systemd:
     name: firewalld
     state: reloaded
-  when: _firewalld_alertmanager_state['changed']
+  when:
+    - alertmanager_allow_firewall
+    - _firewalld_vmware_exporter_state['changed']
+    - - ansible_os_family == RedHat
   become: true
   tags: alertmanager
 
