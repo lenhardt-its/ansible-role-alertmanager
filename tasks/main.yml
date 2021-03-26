@@ -291,7 +291,7 @@
   when:
     - alertmanager_allow_firewall
     - ansible_os_family == RedHat
-  register: "_firewalld_vmware_exporter_state"
+  register: "_firewalld_alertmanager_state"
   become: true
   tags: alertmanager
 
@@ -301,7 +301,7 @@
     state: reloaded
   when:
     - alertmanager_allow_firewall
-    - _firewalld_vmware_exporter_state['changed']
+    - _firewalld_alertmanager_state['changed']
     - - ansible_os_family == RedHat
   become: true
   tags: alertmanager
