@@ -57,8 +57,8 @@ All variables which can be overridden are stored in [defaults/main.yml](defaults
 | `alertmanager_allow_firewall` | false | |
 | `alertmanager_config_dir` | /etc/alertmanager | |
 | `alertmanager_db_dir` | /var/lib/alertmanager | |
-| `alertmanager_system_user` | "{{ prometheus_user | default('prometheus') }}" | |
-| `alertmanager_system_group` | "{{ prometheus_group | default('prometheus') }}" | |
+| `alertmanager_system_user` | prometheus | |
+| `alertmanager_system_group` | prometheus | |
 | `alertmanager_log_level ` | warn | |
 | `alertmanager_log_format` | json | |
 | `alertmanager_web_listen_port:` | 9093 | |
