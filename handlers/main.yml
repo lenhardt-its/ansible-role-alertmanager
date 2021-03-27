@@ -13,3 +13,17 @@
     state: reloaded
   become: true
   tags: alertmanager
+
+- name: reload ufw
+  systemd:
+    name: ufw
+    state: reloaded
+  tags: alertmanager
+  become: true
+
+- name: reload firewalld
+  systemd:
+    name: firewalld
+    state: reloaded
+  tags: alertmanager
+  become: true

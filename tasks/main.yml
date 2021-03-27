@@ -216,6 +216,7 @@
     capability: CAP_NET_BIND_SERVICE+ep
     state: present
   when: alertmanager_web_listen_port <= 1024
+  tags: alertmanager
 
 - name: install selinux dependencies
   package:
@@ -266,22 +267,10 @@
   notify: reload ufw
   become: true
   tags: alertmanager
-  register: "_firewalld_alertmanager_state"
   when:
     - "'active' in _ufw_status.stdout"
     - ansible_os_family == 'Debian'
     - alertmanager_allow_firewall
-
-- name: reload ufw
-  systemd:
-    name: ufw
-    state: reloaded
-  when:
-    - _firewalld_alertmanager_state['changed']
-    - ansible_os_family == 'Debian'
-    - alertmanager_allow_firewall
-  become: true
-  tags: alertmanager
 
 - name: configure firewalld
   firewalld:
@@ -291,18 +280,7 @@
   when:
     - alertmanager_allow_firewall
     - ansible_os_family == 'RedHat'
-  register: "_firewalld_alertmanager_state"
-  become: true
-  tags: alertmanager
-
-- name: reload firewalld
-  systemd:
-    name: firewalld
-    state: reloaded
-  when:
-    - alertmanager_allow_firewall
-    - _firewalld_alertmanager_state['changed']
-    - - ansible_os_family == 'RedHat'
+  notify: reload firewalld
   become: true
   tags: alertmanager
 
