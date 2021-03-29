@@ -167,7 +167,7 @@
     notify: restart alertmanager
     become: true
     tags: alertmanager
-  when: (not __alertmanager_is_installed.stat.exists) or (__alertmanager_current_version_output.stderr_lines[0].split(" ")[2] != alertmanager_version)
+  when: (not __alertmanager_is_installed.stat.exists) or (__alertmanager_current_version_output.stdout.split(" ")[2] != alertmanager_version)
 
 - name: copy alertmanager config
   template:
