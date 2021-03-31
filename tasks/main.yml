@@ -124,7 +124,7 @@
     with_items:
       - "{{ lookup('url', 'https://github.com/prometheus/alertmanager/releases/download/v' + alertmanager_version + '/sha256sums.txt', wantlist=True) | list }}"
     when:
-      - "('linux-' + go_arch + '.tar.gz') in item"
+      - "('alertmanager-' + alertmanager_version + '.linux-' + go_arch + '.tar.gz') in item"
     become: true
     tags: alertmanager
 
@@ -167,7 +167,7 @@
     notify: restart alertmanager
     become: true
     tags: alertmanager
-  when: (not __alertmanager_is_installed.stat.exists) or (__alertmanager_current_version_output.stdout.split(" ")[2] != alertmanager_version)
+  when: (not __alertmanager_is_installed.stat.exists) or (__alertmanager_current_version_output.stderr_lines[0].split(" ")[2] != alertmanager_version)
 
 - name: copy alertmanager config
   template:
