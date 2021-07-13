@@ -37,7 +37,7 @@ Environment="HTTP_PROXY={{ http_proxy }}""
 {% if https_proxy is defined %}
 Environment="HTTPS_PROXY={{ https_proxy }}"
 {% endif %}
-LimitNOFILE=8192
+LimitNOFILE={{ alertmanager_limit_nofile | default('8192') }}
 LimitMEMLOCK=infinity
 
 [Install]

@@ -11,6 +11,7 @@ alertmanager_log_level: warn
 alertmanager_log_format: json
 alertmanager_web_listen_port: 9093
 alertmanager_web_listen_address: 0.0.0.0
+alertmanager_limit_nofile: 8192
 alertmanager_web_external_url: 'http://{{ ansible_domain }}.{{ ansible_hostname }}:{{ alertmanager_web_listen_port }}/'
 
 alertmanager_template_files:
