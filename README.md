@@ -53,7 +53,6 @@ All variables which can be overridden are stored in [defaults/main.yml](defaults
 | `alertmanager_child_routes` | [] | List of child routes. |
 | -------------- | ------------- | -----------------------------------|
 | `alertmanager_binary_local_dir` | /usr/local/bin | |
-| `alertmanager_allow_firewall` | false | |
 | `alertmanager_config_dir` | /etc/alertmanager | |
 | `alertmanager_db_dir` | /var/lib/alertmanager | |
 | `alertmanager_system_user` | prometheus | |
