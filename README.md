@@ -19,7 +19,6 @@ Deploy and manage Prometheus [alertmanager](https://github.com/prometheus/alertm
 ## Requirements
 
 - Ansible >= 2.9 (It might work on previous versions, but we cannot guarantee it)
-- Community Packages: `ansible-galaxy collection install community.general`
 
 ## Role Variables
 
@@ -27,7 +26,7 @@ All variables which can be overridden are stored in [defaults/main.yml](defaults
 
 | Name           | Default Value | Description                        |
 | -------------- | ------------- | -----------------------------------|
-| `proxy_env` | {} | Proxy environment variables |
+| `proxy_env` | {} | Proxy environment variables for Client|
 | `alertmanager_version` | 0.21.0 | Alertmanager package version. Also accepts `latest` as parameter. |
 | `alertmanager_web_listen_address` | 0.0.0.0:9093 | Address on which alertmanager will be listening |
 | `alertmanager_web_external_url` | http://localhost:9093/ | External address on which alertmanager is available. Useful when behind reverse proxy. Ex. example.org/alertmanager |

@@ -12,28 +12,7 @@
   become: true
   tags: alertmanager
 
-- name: assert usage of systemd as an init system
-  assert:
-    that: ansible_service_mgr == 'systemd'
-    msg: "This module only works with systemd"
-  become: true
-  tags: alertmanager
-
-- name: get systemd version
-  command: systemctl --version
-  changed_when: false
-  check_mode: false
-  register: __systemd_version
-  become: true
-  tags: alertmanager
-
-- name: set systemd version fact
-  set_fact:
-    alertmanager_systemd_version: "{{ __systemd_version.stdout_lines[0].split(' ')[-1] }}"
-  become: true
-  tags: alertmanager
-
-- name: create alertmanager system group
+- name: create system group
   group:
     name: "{{ alertmanager_system_group }}"
     system: true
@@ -41,7 +20,7 @@
   become: true
   tags: alertmanager
 
-- name: create alertmanager system user
+- name: create system user
   user:
     name: "{{ alertmanager_system_user }}"
     system: true
@@ -51,7 +30,7 @@
   become: true
   tags: alertmanager
 
-- name: create alertmanager directories
+- name: create directories
   file:
     path: "{{ item }}"
     state: directory
@@ -65,14 +44,14 @@
   become: true
   tags: alertmanager
 
-- name: check if alertmanager is installed
+- name: check if is installed
   stat:
     path: "{{ alertmanager_binary_install_dir }}/alertmanager"
   register: __alertmanager_is_installed
   become: true
   tags: alertmanager
 
-- name: gather currently installed alertmanager version (if any)
+- name: gather currently installed version (if any)
   command: "{{ alertmanager_binary_install_dir }}/alertmanager --version"
   args:
     warn: false
@@ -82,91 +61,93 @@
   become: true
   tags: alertmanager
 
-- block:
-  - name: get latest release
-    uri:
-      url: "https://api.github.com/repos/prometheus/alertmanager/releases/latest"
-      method: GET
-      return_content: true
-      status_code: 200
-      body_format: json
-      validate_certs: false
-      user: "{{ lookup('env', 'GH_USER') | default(omit) }}"
-      password: "{{ lookup('env', 'GH_TOKEN') | default(omit) }}"
-    environment: "{{proxy_env}}"
-    no_log: "{{ not lookup('env', 'MOLECULE_DEBUG') | bool }}"
-    register: _latest_release
-    until: _latest_release.status == 200
-    retries: 5
-    become: true
-    tags: alertmanager
+- name: get latest release
+  uri:
+    url: "https://api.github.com/repos/prometheus/alertmanager/releases/latest"
+    method: GET
+    return_content: true
+    status_code: "200"
+    body_format: json
+    validate_certs: false
+    user: "{{ lookup('env', 'GH_USER') | default(omit) }}"
+    password: "{{ lookup('env', 'GH_TOKEN') | default(omit) }}"
+  environment: "{{ proxy_env }}"
+  no_log: "{{ not lookup('env', 'MOLECULE_DEBUG') | bool }}"
+  register: _latest_release
+  until: _latest_release.status == 200
+  retries: 5
+  become: true
+  tags: alertmanager
+  when: alertmanager_version == "latest"
 
-  - name: "set alertmanager version to {{ _latest_release.json.tag_name[1:] }}"
-    set_fact:
-      alertmanager_version: "{{ _latest_release.json.tag_name[1:] }}"
-    become: true
-    tags: alertmanager
+- name: "set version to {{ _latest_release.json.tag_name[1:] }}"
+  set_fact:
+    alertmanager_version: "{{ _latest_release.json.tag_name[1:] }}"
+  become: true
+  tags: alertmanager
+  when: alertmanager_version == "latest"
+
+- name: get checksum list from github
+  set_fact:
+    _checksums: "{{ lookup('url', 'https://github.com/prometheus/alertmanager/releases/download/v' + alertmanager_version + '/sha256sums.txt', wantlist=True) | list }}"
+  environment: "{{ proxy_env }}"
+  run_once: true
+  become: true
+  tags: alertmanager
+  when: (not __alertmanager_is_installed.stat.exists) or (__alertmanager_current_version_output.stdout_lines[0].split(" ")[2] != alertmanager_version)
+
+- name: "get checksum for architecture"
+  set_fact:
+    alertmanager_checksum: "{{ item.split(' ')[0] }}"
+  with_items:
+    - "{{ lookup('url', 'https://github.com/prometheus/alertmanager/releases/download/v' + alertmanager_version + '/sha256sums.txt', wantlist=True) | list }}"
+  become: true
+  tags: alertmanager
   when:
-    - alertmanager_version == "latest"
+    - ('alertmanager-' + alertmanager_version + '.linux-' + go_arch + '.tar.gz') in item
+    - (not __alertmanager_is_installed.stat.exists) or (__alertmanager_current_version_output.stdout_lines[0].split(" ")[2] != alertmanager_version)
 
-- block:
-  - name: get checksum list from github
-    set_fact:
-      _checksums: "{{ lookup('url', 'https://github.com/prometheus/alertmanager/releases/download/v' + alertmanager_version + '/sha256sums.txt', wantlist=True) | list }}"
-    environment: "{{ proxy_env }}"
-    run_once: true
-    become: true
-    tags: alertmanager
+- name: download binary to local folder
+  get_url:
+    url: "https://github.com/prometheus/alertmanager/releases/download/v{{ alertmanager_version }}/alertmanager-{{ alertmanager_version }}.linux-{{ go_arch }}.tar.gz"
+    dest: "/tmp/alertmanager-{{ alertmanager_version }}.linux-{{ go_arch }}.tar.gz"
+    checksum: "sha256:{{ alertmanager_checksum }}"
+  environment: "{{ proxy_env }}"
+  register: _download_archive
+  until: _download_archive is succeeded
+  retries: 5
+  delay: 2
+  # run_once: true # <-- this can't be set due to multi-arch support
+  delegate_to: localhost
+  check_mode: false
+  become: true
+  tags: alertmanager
+  when: (not __alertmanager_is_installed.stat.exists) or (__alertmanager_current_version_output.stdout_lines[0].split(" ")[2] != alertmanager_version)
 
-  - name: "get checksum for {{ go_arch }} architecture"
-    set_fact:
-      alertmanager_checksum: "{{ item.split(' ')[0] }}"
-    with_items:
-      - "{{ lookup('url', 'https://github.com/prometheus/alertmanager/releases/download/v' + alertmanager_version + '/sha256sums.txt', wantlist=True) | list }}"
-    when:
-      - "('alertmanager-' + alertmanager_version + '.linux-' + go_arch + '.tar.gz') in item"
-    become: true
-    tags: alertmanager
+- name: unpack binaries
+  unarchive:
+    src: "/tmp/alertmanager-{{ alertmanager_version }}.linux-{{ go_arch }}.tar.gz"
+    dest: "/tmp"
+    creates: "/tmp/alertmanager-{{ alertmanager_version }}.linux-{{ go_arch }}/alertmanager"
+  delegate_to: localhost
+  check_mode: false
+  become: true
+  tags: alertmanager
+  when: (not __alertmanager_is_installed.stat.exists) or (__alertmanager_current_version_output.stdout_lines[0].split(" ")[2] != alertmanager_version)
 
-  - name: download alertmanager binary to local folder
-    get_url:
-      url: "https://github.com/prometheus/alertmanager/releases/download/v{{ alertmanager_version }}/alertmanager-{{ alertmanager_version }}.linux-{{ go_arch }}.tar.gz"
-      dest: "/tmp/alertmanager-{{ alertmanager_version }}.linux-{{ go_arch }}.tar.gz"
-      checksum: "sha256:{{ alertmanager_checksum }}"
-    environment: "{{proxy_env}}"
-    register: _download_archive
-    until: _download_archive is succeeded
-    retries: 5
-    delay: 2
-    # run_once: true # <-- this can't be set due to multi-arch support
-    delegate_to: localhost
-    check_mode: false
-    become: true
-    tags: alertmanager
-
-  - name: unpack alertmanager binaries
-    unarchive:
-      src: "/tmp/alertmanager-{{ alertmanager_version }}.linux-{{ go_arch }}.tar.gz"
-      dest: "/tmp"
-      creates: "/tmp/alertmanager-{{ alertmanager_version }}.linux-{{ go_arch }}/alertmanager"
-    delegate_to: localhost
-    check_mode: false
-    become: true
-    tags: alertmanager
-
-  - name: propagate official alertmanager and amtool binaries
-    copy:
-      src: "/tmp/alertmanager-{{ alertmanager_version }}.linux-{{ go_arch }}/{{ item }}"
-      dest: "{{ alertmanager_binary_install_dir }}/{{ item }}"
-      mode: 0755
-      owner: root
-      group: root
-    with_items:
-      - alertmanager
-      - amtool
-    notify: restart alertmanager
-    become: true
-    tags: alertmanager
+- name: propagate binaries
+  copy:
+    src: "/tmp/alertmanager-{{ alertmanager_version }}.linux-{{ go_arch }}/{{ item }}"
+    dest: "{{ alertmanager_binary_install_dir }}/{{ item }}"
+    mode: 0755
+    owner: root
+    group: root
+  with_items:
+    - alertmanager
+    - amtool
+  notify: restart alertmanager
+  become: true
+  tags: alertmanager
   when: (not __alertmanager_is_installed.stat.exists) or (__alertmanager_current_version_output.stdout_lines[0].split(" ")[2] != alertmanager_version)
 
 - name: copy alertmanager config
@@ -177,7 +158,7 @@
     owner: "{{ alertmanager_system_user }}"
     group: "{{ alertmanager_system_group }}"
     mode: 0644
-    validate: "{{ alertmanager_binary_install_dir }}/amtool --alertmanager.url=  check-config %s"
+    validate: "{{ alertmanager_binary_install_dir }}/amtool --alertmanager.url= check-config %s"
   notify: reload alertmanager
   become: true
   tags:
@@ -207,94 +188,6 @@
     group: root
     mode: 0644
   notify: restart alertmanager
-  become: true
-  tags: alertmanager
-
-- name: enable capabilities to ports lower than port 1024
-  capabilities:
-    path: "{{ alertmanager_binary_install_dir }}/alertmanager"
-    capability: CAP_NET_BIND_SERVICE+ep
-    state: present
-  when: alertmanager_web_listen_port <= 1024
-  tags: alertmanager
-
-- name: install selinux dependencies
-  package:
-    name: "{{ item }}"
-    state: present
-  environment: "{{ proxy_env }}"
-  with_items: "{{ alertmanager_selinux_packages }}"
-  register: _install_packages
-  until: _install_packages is succeeded
-  retries: 5
-  delay: 2
-  when:
-    - ansible_version.full is version_compare('2.4', '>=')
-    - ansible_selinux.status == "enabled"
-  become: true
-  tags: alertmanager
-
-- name: allow binding to port in selinux
-  seport:
-    ports: "{{ alertmanager_web_listen_port }}"
-    proto: tcp
-    setype: http_port_t
-    state: present
-  when:
-    - ansible_version.full is version_compare('2.4', '>=')
-    - ansible_selinux.status == "enabled"
-  become: true
-  tags: alertmanager
-
-- name: check whether ufw status is active
-  command: "ufw status"
-  changed_when: False
-  ignore_errors: True
-  register: _ufw_status
-  become: true
-  when:
-    - alertmanager_allow_firewall
-    - ansible_os_family == 'Debian'
-  tags: alertmanager
-
-- name: check whether firewalld status is active
-  command: "firewall-cmd --state"
-  changed_when: False
-  ignore_errors: True
-  register: _firewalld_status
-  become: true
-  when: ansible_os_family == 'RedHat'
-  tags: alertmanager
-
-- name: configure ufw
-  community.general.ufw:
-    rule: allow
-    port: "{{ alertmanager_web_listen_port }}"
-    proto: tcp
-    state: enabled
-    comment: "Alertmanager"
-  changed_when: False
-  ignore_errors: True
-  notify: reload ufw
-  become: true
-  tags: alertmanager
-  when:
-    - "'active' in _ufw_status.stdout"
-    - ansible_os_family == 'Debian'
-    - alertmanager_allow_firewall
-
-- name: configure firewalld
-  firewalld:
-    port: "{{ alertmanager_web_listen_port }}/tcp"
-    permanent: yes
-    state: true
-  changed_when: False
-  ignore_errors: True
-  when:
-    - "'running' in _firewalld_status.stdout"
-    - alertmanager_allow_firewall
-    - ansible_os_family == 'RedHat'
-  notify: reload firewalld
   become: true
   tags: alertmanager
 
