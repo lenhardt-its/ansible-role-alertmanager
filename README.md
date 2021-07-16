@@ -62,6 +62,7 @@ All variables which can be overridden are stored in [defaults/main.yml](defaults
 | `alertmanager_web_listen_address` | "0.0.0.0" | |
 | `alertmanager_create_consul_agent_service` | true | |
 | `alertmanager_web_external_url` | "http://{{ ansible_domain }}.{{ ansible_hostname }}:{{ alertmanager_web_listen_port }}/" | |
+| `alertmanager_webconfig` | [] | Define Alertmanager Webconfig |
 
 ## Example
 

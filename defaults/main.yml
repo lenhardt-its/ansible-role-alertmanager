@@ -118,3 +118,5 @@ alertmanager_child_routes: {}
 #         - match:
 #             owner: team-Y
 #           receiver: team-Y-pager
+
+alertmanager_webconfig: []

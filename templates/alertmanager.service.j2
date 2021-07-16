@@ -22,6 +22,9 @@ ExecStart={{ alertmanager_binary_install_dir }}/alertmanager \
 {% endfor %}
   --config.file={{ alertmanager_config_dir }}/config.yml \
   --storage.path={{ alertmanager_db_dir }} \
+{% if alertmanager_webconfig is defined and alertmanager_webconfig | length > 0 %}
+  --web.config.file={{ alertmanager_config_dir }}/web.yml \
+{% endif %}
   --log.level={{ alertmanager_log_level }} \
   --log.format={{ alertmanager_log_format }} \
   --web.listen-address={{ alertmanager_web_listen_address }}:{{ alertmanager_web_listen_port }} \

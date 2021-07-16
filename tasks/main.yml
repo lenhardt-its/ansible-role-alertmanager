@@ -152,6 +152,21 @@
     - alertmanager
     - alertmanager_config
 
+- name: configure web
+  copy:
+    content: "{{ alertmanager_webconfig | to_nice_yaml(indent=2) }}"
+    dest: "{{ alertmanager_config_dir }}/web.yml"
+    force: true
+    owner: "{{ alertmanager_system_user }}"
+    group: "{{ alertmanager_system_group }}"
+    mode: 0644
+  notify: reload alertmanager
+  when: alertmanager_webconfig | length > 0
+  become: true
+  tags:
+    - alertmanager
+    - alertmanager_config
+
 - name: copy alertmanager template files
   copy:
     src: "{{ item }}"
